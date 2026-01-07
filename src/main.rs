@@ -4,18 +4,9 @@ mod render;
 mod world;
 
 fn main() {
-    let mut app = App::new();
-
-    #[cfg(target_arch = "wasm32")]
-    app.add_plugins(DefaultPlugins.set(AssetPlugin {
-        asset_folder: "assets".into(),
-        ..default()
-    }));
-
-    #[cfg(not(target_arch = "wasm32"))]
-    app.add_plugins(DefaultPlugins);
-
-    app.add_plugins((world::WorldPlugin, render::RenderPlugin))
+    App::new()
+        .add_plugins(DefaultPlugins)
+        .add_plugins((world::WorldPlugin, render::RenderPlugin))
         .add_systems(Startup, light_scene)
         .run();
 }
