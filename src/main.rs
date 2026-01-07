@@ -1,11 +1,14 @@
-use bevy::prelude::*;
+use bevy::{asset::AssetMetaCheck, prelude::*};
 
 mod render;
 mod world;
 
 fn main() {
     App::new()
-        .add_plugins(DefaultPlugins)
+        .add_plugins(DefaultPlugins.set(AssetPlugin {
+            meta_check: AssetMetaCheck::Never,
+            ..default()
+        }))
         .add_plugins((world::WorldPlugin, render::RenderPlugin))
         .add_systems(Startup, light_scene)
         .run();
