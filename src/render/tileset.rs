@@ -1,6 +1,8 @@
 use bevy::{gltf::GltfMesh, prelude::*};
 use std::collections::HashMap;
 
+use crate::world::WorldChanged;
+
 use super::tile_kind::TileKind;
 
 #[derive(Clone)]
@@ -31,6 +33,7 @@ pub fn populate_tileset(
     gltfs: Res<Assets<Gltf>>,
     gltf_meshes: Res<Assets<GltfMesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut changed: MessageWriter<WorldChanged>,
 ) {
     if tileset.ready {
         return;
@@ -80,5 +83,6 @@ pub fn populate_tileset(
     if tileset.tiles.len() == 6 {
         tileset.ready = true;
         info!("Tileset ready!");
+        changed.write_default();
     }
 }
