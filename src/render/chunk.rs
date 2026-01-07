@@ -1,56 +1,96 @@
 use bevy::prelude::*;
 
-use crate::render::meshing::build_chunk_mesh;
-use crate::world::{World, WorldChanged};
+use super::autotile::neighbors;
+use super::classify::classify;
+use super::tileset::Tileset;
+use crate::world::{Coord, Voxel, WORLD_SIZE, World, WorldChanged};
 
 #[derive(Component)]
-pub struct ChunkMesh {
-    pub mesh: Handle<Mesh>,
-}
+pub struct ChunkRoot;
 
-pub fn spawn_chunk(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    world: Res<World>,
-) {
-    let mesh_handle = meshes.add(build_chunk_mesh(&world));
+#[derive(Component)]
+pub struct TileInstance;
 
-    let mat_handle = materials.add(StandardMaterial {
-        base_color: Color::srgb(0.85, 0.45, 0.35),
-        perceptual_roughness: 0.9,
-        metallic: 0.0,
-        // keep default culling ON (correct windings)
-        ..Default::default()
-    });
-
+pub fn spawn_chunk(mut commands: Commands) {
     commands.spawn((
-        ChunkMesh {
-            mesh: mesh_handle.clone(),
-        },
-        Mesh3d(mesh_handle),
-        MeshMaterial3d(mat_handle),
+        ChunkRoot,
         Transform::IDENTITY,
+        GlobalTransform::IDENTITY,
+        Visibility::default(),
     ));
 }
 
 pub fn remesh_on_world_changed(
     mut ev: MessageReader<WorldChanged>,
     world: Res<World>,
-    q: Query<&ChunkMesh>,
-    mut meshes: ResMut<Assets<Mesh>>,
+    tileset: Res<Tileset>,
+    mut commands: Commands,
+    q_root: Query<Entity, With<ChunkRoot>>,
+    q_tiles: Query<Entity, With<TileInstance>>,
 ) {
     if ev.is_empty() {
         return;
     }
+
+    if !tileset.ready {
+        return;
+    }
+
+    info!(
+        "Remesh triggered. tileset_ready={}, tiles={}",
+        tileset.ready,
+        tileset.tiles.len()
+    );
+
     ev.clear();
 
-    let Ok(chunk) = q.single() else {
-        return;
-    };
-    let Some(mesh) = meshes.get_mut(&chunk.mesh) else {
+    let Ok(root) = q_root.single() else {
         return;
     };
 
-    *mesh = build_chunk_mesh(&world);
+    // Clear previous render instances
+    for e in &q_tiles {
+        commands.entity(e).despawn();
+    }
+
+    // Spawn tiles
+    for y in 0..WORLD_SIZE {
+        for z in 0..WORLD_SIZE {
+            for x in 0..WORLD_SIZE {
+                let c = Coord::new(x, y, z);
+                if world.get(&c) == Voxel::Air {
+                    continue;
+                }
+
+                let nei = neighbors(&world, c);
+                let (kind, rot) = classify(nei);
+
+                let pos = voxel_min_world(c) + Vec3::splat(0.5);
+
+                let Some(tile) = tileset.tiles.get(&kind).cloned() else {
+                    continue;
+                };
+
+                commands.entity(root).with_children(|p| {
+                    p.spawn((
+                        TileInstance,
+                        Mesh3d(tile.mesh),
+                        MeshMaterial3d(tile.material),
+                        Transform {
+                            translation: pos,
+                            rotation: rot,
+                            scale: Vec3::ONE,
+                        },
+                        GlobalTransform::IDENTITY,
+                        Visibility::default(),
+                    ));
+                });
+            }
+        }
+    }
+}
+
+fn voxel_min_world(c: Coord) -> Vec3 {
+    let half = WORLD_SIZE as f32 / 2.0;
+    Vec3::new(c.x as f32 - half, c.y as f32 - half, c.z as f32 - half)
 }
